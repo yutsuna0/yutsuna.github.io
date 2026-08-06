@@ -1,0 +1,3 @@
+[
+  { "date": "2026-02-08", "name": "Pterodactyl", "platform": "HTB", "os": "Linux", "diff": "Medium", "tags": ["pterodactyl-panel", "cve-2025-49132", "pearcmd-rce", "path-traversal", "lfi", "credential-dump", "hashcat", "cve-2025-6018", "cve-2025-6019", "udisks-lpe"], "url": "writeups/htb/pterodactyl" }
+  ]
