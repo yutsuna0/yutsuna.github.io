@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yutsuna // CTF WRITEUPS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0612;
+    --bg-panel: rgba(18,10,32,0.85);
+    --border: rgba(0,255,240,0.22);
+    --cyan: #00fff0;
+    --cyan-dim: rgba(0,255,240,0.5);
+    --cyan-glow: rgba(0,255,240,0.14);
+    --magenta: #ff2ee6;
+    --magenta-dim: rgba(255,46,230,0.5);
+    --yellow: #f6ff2e;
+    --text: #cfe8ea;
+    --text-dim: #6f7a9c;
+    --mono: 'Share Tech Mono', monospace;
+    --display: 'Orbitron', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: crosshair;
+  }
+
+  /* ── SCANLINES ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 2px,
+      rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 3px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* CRT flicker */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: rgba(255,46,230,0.015);
+    pointer-events: none;
+    z-index: 999;
+    animation: flicker 6s infinite;
+  }
+  @keyframes flicker {
+    0%,93%,100% { opacity: 0; }
+    94% { opacity: 1; }
+    95% { opacity: 0; }
+    96% { opacity: 0.6; }
+    97% { opacity: 0; }
+  }
+
+  /* ── GRAIN ── */
+  .grain {
+    position: fixed; inset: 0; z-index: 1;
+    pointer-events: none; opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    animation: grain 0.15s steps(1) infinite;
+  }
+  @keyframes grain {
+    0%,100%{background-position:0 0} 10%{background-position:-5% -10%}
+    20%{background-position:-15% 5%} 30%{background-position:7% -20%}
+    40%{background-position:-5% 25%} 50%{background-position:-15% 10%}
+    60%{background-position:15% 0} 70%{background-position:0 15%}
+    80%{background-position:3% 35%} 90%{background-position:-10% 10%}
+  }
+
+  .site-wrap { position: relative; z-index: 10; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── NAV ── */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.4rem 3rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,6,18,0.7);
+    backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 0 rgba(255,46,230,0.15);
+  }
+  .nav-logo {
+    font-family: var(--display); font-weight: 900; font-size: 1.4rem;
+    letter-spacing: 0.1em; color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan), 0 0 24px rgba(0,255,240,0.4);
+    text-decoration: none;
+    position: relative;
+  }
+  .nav-logo span { color: var(--magenta); text-shadow: 0 0 8px var(--magenta), 0 0 24px rgba(255,46,230,0.4); }
+  .nav-links { display: flex; gap: 2.4rem; list-style: none; }
+  .nav-links a {
+    font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--text-dim); text-decoration: none;
+    transition: color 0.2s, text-shadow 0.2s;
+    position: relative;
+  }
+  .nav-links a::before { content: '['; margin-right: 3px; opacity: 0; transition: opacity 0.2s; color: var(--magenta); }
+  .nav-links a::after { content: ']'; margin-left: 3px; opacity: 0; transition: opacity 0.2s; color: var(--magenta); }
+  .nav-links a:hover { color: var(--cyan); text-shadow: 0 0 10px var(--cyan-dim); }
+  .nav-links a:hover::before, .nav-links a:hover::after { opacity: 1; }
+  .nav-status { font-size: 0.7rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.5rem; letter-spacing: 0.1em; }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--magenta); box-shadow: 0 0 8px var(--magenta), 0 0 16px var(--magenta);
+    animation: blink 1.6s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+  /* ── HERO ── */
+  .hero { padding: 7rem 3rem 5rem; max-width: 900px; }
+  .hero-label {
+    font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--magenta); margin-bottom: 1.3rem;
+    text-shadow: 0 0 12px var(--magenta-dim);
+    opacity: 0; animation: fadeUp 0.6s 0.2s forwards;
+  }
+  .hero-label::before { content: '// '; color: var(--cyan); }
+
+  .hero h1 {
+    font-family: var(--display); font-weight: 900;
+    font-size: clamp(2.4rem, 6vw, 4.6rem); line-height: 1.05;
+    letter-spacing: 0.02em; color: #fff;
+    text-transform: uppercase;
+    margin-bottom: 1.6rem;
+    opacity: 0; animation: fadeUp 0.6s 0.35s forwards;
+    position: relative;
+  }
+  .hero h1 .glitch-word {
+    color: var(--cyan);
+    text-shadow:
+      0 0 10px var(--cyan),
+      0 0 30px rgba(0,255,240,0.5),
+      3px 0 0 rgba(255,46,230,0.6),
+      -3px 0 0 rgba(0,255,240,0.6);
+    position: relative;
+    display: inline-block;
+    animation: glitchText 4s infinite;
+  }
+  @keyframes glitchText {
+    0%, 92%, 100% { text-shadow: 0 0 10px var(--cyan), 0 0 30px rgba(0,255,240,0.5), 3px 0 0 rgba(255,46,230,0.6), -3px 0 0 rgba(0,255,240,0.6); transform: translate(0,0); }
+    93% { text-shadow: 0 0 10px var(--magenta), 6px 0 0 rgba(255,46,230,0.8), -6px 0 0 rgba(0,255,240,0.8); transform: translate(-2px,1px); }
+    94% { text-shadow: 0 0 10px var(--cyan), -4px 0 0 rgba(0,255,240,0.8), 4px 0 0 rgba(255,46,230,0.8); transform: translate(2px,-1px); }
+    95% { text-shadow: 0 0 10px var(--cyan), 0 0 30px rgba(0,255,240,0.5), 3px 0 0 rgba(255,46,230,0.6), -3px 0 0 rgba(0,255,240,0.6); transform: translate(0,0); }
+  }
+
+  .hero p {
+    font-size: 0.92rem; line-height: 1.85; color: var(--text-dim);
+    max-width: 540px; margin-bottom: 2rem;
+    opacity: 0; animation: fadeUp 0.6s 0.5s forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(16px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  /* ── TERMINAL PROMPT ── */
+  .prompt-bar {
+    margin: 0 3rem;
+    padding: 0.9rem 1.4rem;
+    background: rgba(6,3,12,0.8);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--magenta);
+    display: flex; align-items: center; gap: 0.7rem;
+    max-width: 640px; font-size: 0.82rem; color: var(--text-dim);
+    opacity: 0; animation: fadeUp 0.6s 0.8s forwards;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 0 24px rgba(255,46,230,0.06);
+  }
+  .prompt-ps1 { color: var(--cyan); text-shadow: 0 0 6px var(--cyan-dim); }
+  .prompt-cmd { color: var(--yellow); }
+  .prompt-cursor {
+    display: inline-block; width: 8px; height: 14px;
+    background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
+    animation: cursor 1s steps(1) infinite;
+    vertical-align: middle;
+  }
+  @keyframes cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── SECTION ── */
+  section { padding: 5rem 3rem; max-width: 1200px; width: 100%; margin: 0 auto; }
+  .section-header {
+    display: flex; align-items: baseline; gap: 1rem;
+    margin-bottom: 2rem; padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .section-header::after {
+    content: ''; position: absolute; bottom: -1px; left: 0;
+    width: 80px; height: 1px;
+    background: var(--magenta);
+    box-shadow: 0 0 8px var(--magenta);
+  }
+  .section-title {
+    font-family: var(--display); font-size: 1.5rem; font-weight: 900;
+    letter-spacing: 0.1em; text-transform: uppercase; color: #fff;
+  }
+  .section-count { font-size: 0.7rem; color: var(--cyan); letter-spacing: 0.15em; text-shadow: 0 0 6px var(--cyan-dim); }
+
+  /* ── FILTER BAR ── */
+  .filter-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.6rem; align-items: center; }
+
+  /* ── PLATFORM CARDS ── */
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 1.1rem;
+  }
+  .platform-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 1.6rem 1.5rem;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  }
+  .platform-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+  .platform-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--cyan-dim);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,255,240,0.08);
+  }
+  .platform-card:hover::before { transform: scaleX(1); }
+
+  .platform-card-name {
+    font-family: var(--display); font-weight: 900; font-size: 1.5rem;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #fff;
+  }
+  .platform-card-count {
+    font-size: 0.72rem; letter-spacing: 0.12em; color: var(--text-dim);
+  }
+  .platform-card-count span { color: var(--cyan); text-shadow: 0 0 6px var(--cyan-dim); }
+  .platform-card-bar {
+    display: flex; gap: 3px; height: 4px; margin-top: 0.2rem;
+  }
+  .platform-card-bar div { flex: 1; background: rgba(255,255,255,0.08); }
+  .platform-card-diffs {
+    display: flex; gap: 0.4rem; flex-wrap: wrap; font-size: 0.62rem;
+    letter-spacing: 0.06em; color: var(--text-dim);
+  }
+  .platform-card-diffs span { white-space: nowrap; }
+  .plat-card-HTB   { border-left: 3px solid #9fef00; }
+  .plat-card-THM   { border-left: 3px solid #ff5277; }
+  .plat-card-HackSmarter { border-left: 3px solid var(--yellow); }
+
+  /* ── BACK BUTTON ── */
+  .back-btn {
+    font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.1em;
+    color: var(--text-dim); background: transparent; border: none;
+    cursor: pointer; margin-bottom: 1.4rem;
+    display: flex; align-items: center; gap: 0.4rem;
+    transition: color 0.2s;
+    padding: 0;
+  }
+  .back-btn:hover { color: var(--cyan); text-shadow: 0 0 8px var(--cyan-dim); }
+  .filter-label { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-right: 0.5rem; }
+  .filter-btn {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 0.3rem 0.8rem;
+    border: 1px solid rgba(255,255,255,0.12); background: transparent;
+    color: var(--text-dim); cursor: pointer; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    transition: all 0.18s;
+  }
+  .filter-btn:hover { border-color: var(--cyan-dim); color: var(--cyan); box-shadow: 0 0 10px rgba(0,255,240,0.15); }
+  .filter-btn.active { border-color: var(--magenta); color: var(--magenta); background: rgba(255,46,230,0.08); box-shadow: 0 0 12px rgba(255,46,230,0.2); }
+
+  .search-wrap { margin-left: auto; position: relative; }
+  .search-input {
+    font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em;
+    background: rgba(6,3,12,0.7); border: 1px solid var(--border);
+    color: var(--text); padding: 0.34rem 0.85rem 0.34rem 2rem;
+    width: 200px; outline: none;
+    clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .search-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 12px rgba(0,255,240,0.15); }
+  .search-input::placeholder { color: var(--text-dim); }
+  .search-icon { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); color: var(--cyan); font-size: 0.75rem; pointer-events: none; }
+
+  /* ── WRITEUP LIST ── */
+  .writeup-list { display: flex; flex-direction: column; gap: 0; }
+  .year-group { margin-bottom: 0.3rem; margin-top: 1.6rem; }
+  .year-group:first-child { margin-top: 0; }
+  .year-label {
+    font-family: var(--display); font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.25em; text-transform: uppercase;
+    color: var(--magenta); padding: 0.4rem 0;
+    border-bottom: 1px solid rgba(255,46,230,0.15);
+    margin-bottom: 0.1rem;
+    text-shadow: 0 0 8px rgba(255,46,230,0.3);
+  }
+
+  .entry {
+    display: grid;
+    grid-template-columns: 110px 1fr auto auto;
+    align-items: center; gap: 0.5rem 1.2rem;
+    padding: 0.7rem 0.6rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-left: 2px solid transparent;
+    text-decoration: none; color: inherit;
+    transition: background 0.15s, border-color 0.15s, padding-left 0.15s;
+  }
+  .entry:hover {
+    background: linear-gradient(90deg, rgba(0,255,240,0.05), rgba(255,46,230,0.03));
+    border-left-color: var(--cyan);
+    padding-left: 1.1rem;
+  }
+  .entry:hover .entry-name { color: var(--cyan); text-shadow: 0 0 8px rgba(0,255,240,0.5); }
+  .entry:hover .entry-arrow { opacity: 1; color: var(--magenta); transform: translateX(2px); }
+
+  .entry-date { font-size: 0.72rem; color: var(--text-dim); letter-spacing: 0.05em; white-space: nowrap; }
+  .entry-name { font-family: var(--display); font-weight: 700; font-size: 1.02rem; letter-spacing: 0.04em; color: #e8f4f6; transition: color 0.15s, text-shadow 0.15s; text-transform: uppercase; }
+  .entry-os { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); white-space: nowrap; }
+
+  .entry-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; grid-column: 2; }
+  .entry-tag {
+    font-size: 0.6rem; letter-spacing: 0.05em; color: var(--text-dim);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    padding: 0.1rem 0.4rem; cursor: pointer; transition: all 0.15s;
+  }
+  .entry-tag:hover { color: var(--cyan); border-color: var(--cyan-dim); background: rgba(0,255,240,0.08); }
+  .entry-diff {
+    font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 0.2rem 0.55rem; white-space: nowrap;
+    clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  }
+  .diff-easy   { background: rgba(0,255,240,0.1);   color: var(--cyan);    border: 1px solid rgba(0,255,240,0.3); }
+  .diff-medium { background: rgba(246,255,46,0.1);  color: var(--yellow);  border: 1px solid rgba(246,255,46,0.3); }
+  .diff-hard   { background: rgba(255,120,46,0.1);  color: #ff782e;        border: 1px solid rgba(255,120,46,0.3); }
+  .diff-insane { background: rgba(255,46,230,0.1);  color: var(--magenta); border: 1px solid rgba(255,46,230,0.35); }
+
+  .entry-meta { display: flex; align-items: center; gap: 0.9rem; }
+  .entry-arrow { font-size: 0.85rem; color: var(--text-dim); opacity: 0; transition: opacity 0.15s, color 0.15s, transform 0.15s; }
+
+  /* ── PAGINATION ── */
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+  .page-btn {
+    font-family: var(--mono); font-size: 0.72rem;
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,0.12); background: transparent;
+    color: var(--text-dim); cursor: pointer;
+    clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+    transition: all 0.18s;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--cyan-dim); color: var(--cyan); box-shadow: 0 0 10px rgba(0,255,240,0.15); }
+  .page-btn.active { border-color: var(--magenta); color: var(--magenta); background: rgba(255,46,230,0.08); box-shadow: 0 0 10px rgba(255,46,230,0.2); }
+  .page-btn:disabled { opacity: 0.3; cursor: default; }
+  .page-ellipsis { font-size: 0.72rem; color: var(--text-dim); padding: 0 0.2rem; }
+  .page-info { font-size: 0.68rem; color: var(--text-dim); margin-left: 0.8rem; }
+
+  .empty-state { padding: 3rem 0; text-align: center; font-size: 0.8rem; color: var(--text-dim); letter-spacing: 0.1em; }
+  .empty-state span { color: var(--magenta); }
+
+  footer { border-top: 1px solid var(--border); background: rgba(6,3,12,0.7); backdrop-filter: blur(6px); padding: 1.2rem 3rem; }
+
+  @media (max-width: 720px) {
+    nav { padding: 1rem 1.4rem; }
+    .nav-status, .nav-links li:not(:last-child) { display: none; }
+    .hero { padding: 4rem 1.4rem 3rem; }
+    .prompt-bar { margin: 0 1.4rem; }
+    section { padding: 3rem 1.4rem; }
+    .entry { grid-template-columns: 90px 1fr auto; gap: 0.7rem; }
+    .entry-os { display: none; }
+    .search-wrap { margin-left: 0; width: 100%; }
+    .search-input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grain"></div>
+
+<div class="site-wrap">
+
+  <nav>
+    <a href="#" class="nav-logo">yut<span>suna</span></a>
+    <ul class="nav-links">
+      <li><a href="#writeups">Writeups</a></li>
+      <li><a href="https://app.hackthebox.com" target="_blank">HTB</a></li>
+    </ul>
+    <div class="nav-status">
+      <div class="status-dot"></div>
+      SYS_ONLINE
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-label">yutsuna</div>
+    <h1>Cybersecurity<br><span class="glitch-word">Writeups</span></h1>
+    <p>
+      A collection of writeups for CTF challenges and cybersecurity work.
+    </p>
+  </div>
+
+  <div class="prompt-bar">
+    <span class="prompt-ps1">root@yutsuna:~#</span>
+    <span class="prompt-cmd">ls writeups/ | sort -r</span>
+    <span class="prompt-cursor"></span>
+  </div>
+
+  <section id="writeups">
+    <div class="section-header">
+      <span class="section-title" id="section-title-text">Writeups</span>
+      <span class="section-count" id="wup-count">// 0 entries</span>
+    </div>
+
+    <!-- PLATFORM CARDS (landing view) -->
+    <div class="platform-grid" id="platform-grid"></div>
+
+    <!-- DRILLED-IN LIST VIEW -->
+    <div id="list-view" style="display:none">
+      <button class="back-btn" id="back-btn">‹ back to platforms</button>
+
+      <div class="filter-bar" id="filter-bar">
+        <span class="filter-label">filter:</span>
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="Easy">Easy</button>
+        <button class="filter-btn" data-filter="Medium">Medium</button>
+        <button class="filter-btn" data-filter="Hard">Hard</button>
+        <button class="filter-btn" data-filter="Insane">Insane</button>
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input type="text" class="search-input" id="search" placeholder="search name, tag, os…" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="writeup-list" id="writeup-list"></div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </section>
+
+  <footer></footer>
+</div>
+
+<script>
+const CONFIG = { perPage: 25, writeups: [] };
+let currentPage = 1, currentFilter = 'all', currentSearch = '';
+let currentPlatform = null; // null = platform grid view
+
+function diffClass(d) { return { Easy:'diff-easy', Medium:'diff-medium', Hard:'diff-hard', Insane:'diff-insane' }[d] || 'diff-easy'; }
+
+/* ── Platform grid (landing view) ── */
+function renderPlatformGrid(){
+  const grid = document.getElementById('platform-grid');
+  const groups = {};
+  for (const w of CONFIG.writeups) {
+    const p = w.platform || 'Other';
+    (groups[p] = groups[p] || []).push(w);
+  }
+  const platforms = Object.keys(groups).sort((a,b)=>groups[b].length - groups[a].length);
+
+  document.getElementById('section-title-text').textContent = 'Writeups';
+  document.getElementById('wup-count').textContent = `// ${CONFIG.writeups.length} entries · ${platforms.length} platforms`;
+
+  if (platforms.length === 0) {
+    grid.innerHTML = `<div class="empty-state">no writeups found</div>`;
+    return;
+  }
+
+  grid.innerHTML = platforms.map(p => {
+    const items = groups[p];
+    const diffCounts = {};
+    for (const w of items) diffCounts[w.diff] = (diffCounts[w.diff]||0) + 1;
+    const diffOrder = ['Easy','Medium','Hard','Insane'];
+    const diffsHtml = diffOrder.filter(d=>diffCounts[d]).map(d =>
+      `<span>${diffCounts[d]} ${d}</span>`
+    ).join(' · ');
+
+    return `
+      <a class="platform-card plat-card-${p}" href="#writeups" onclick="openPlatform('${p.replace(/'/g,"\\'")}')">
+        <div class="platform-card-name">${p}</div>
+        <div class="platform-card-count"><span>${items.length}</span> writeup${items.length===1?'':'s'}</div>
+        <div class="platform-card-diffs">${diffsHtml}</div>
+      </a>`;
+  }).join('');
+}
+
+function openPlatform(p){
+  currentPlatform = p;
+  currentFilter = 'all';
+  currentSearch = '';
+  currentPage = 1;
+  document.getElementById('search').value = '';
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.filter-btn[data-filter="all"]').classList.add('active');
+
+  document.getElementById('platform-grid').style.display = 'none';
+  document.getElementById('list-view').style.display = 'block';
+  document.getElementById('section-title-text').textContent = p;
+  renderList();
+}
+
+function closePlatform(){
+  currentPlatform = null;
+  document.getElementById('list-view').style.display = 'none';
+  document.getElementById('platform-grid').style.display = 'grid';
+  renderPlatformGrid();
+}
+document.getElementById('back-btn').addEventListener('click', closePlatform);
+
+/* ── Writeup list (drilled-in view) ── */
+function getFiltered() {
+  return CONFIG.writeups.slice().sort((a,b)=>b.date.localeCompare(a.date)).filter(w=>{
+    if (currentPlatform && w.platform !== currentPlatform) return false;
+    const tags = w.tags || [];
+    const matchFilter = currentFilter==='all' || w.diff===currentFilter || w.os===currentFilter;
+    const q = currentSearch.toLowerCase();
+    const matchSearch = !q ||
+      w.name.toLowerCase().includes(q) ||
+      w.os.toLowerCase().includes(q) ||
+      w.diff.toLowerCase().includes(q) ||
+      w.date.includes(q) ||
+      tags.some(t => t.toLowerCase().includes(q));
+    return matchFilter && matchSearch;
+  });
+}
+function groupByYear(list){ const g={}; for(const w of list){ const y=w.date.slice(0,4); (g[y]=g[y]||[]).push(w);} return g; }
+
+function renderList(){
+  const filtered = getFiltered();
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total/CONFIG.perPage));
+  if (currentPage>pages) currentPage=1;
+  const pageItems = filtered.slice((currentPage-1)*CONFIG.perPage, currentPage*CONFIG.perPage);
+  const list = document.getElementById('writeup-list');
+  document.getElementById('wup-count').textContent = `// ${total} entr${total===1?'y':'ies'}`;
+  if (pageItems.length===0){
+    list.innerHTML = `<div class="empty-state">no results for <span>"${currentSearch||currentFilter}"</span></div>`;
+    document.getElementById('pagination').innerHTML=''; return;
+  }
+  const groups = groupByYear(pageItems);
+  const years = Object.keys(groups).sort((a,b)=>b-a);
+  let html='';
+  for (const yr of years){
+    html += `<div class="year-group"><div class="year-label">${yr}</div>`;
+    for (const w of groups[yr]){
+      const tags = w.tags || [];
+      const tagsHtml = tags.length ? `<span class="entry-tags">${
+        tags.map(t => `<span class="entry-tag" onclick="tagSearch(event,'${t.replace(/'/g,"\\'")}')">${t}</span>`).join('')
+      }</span>` : '';
+      html += `<a class="entry" href="${w.url}/index.html">
+        <span class="entry-date">${w.date.slice(5)}</span>
+        <span class="entry-name">${w.name}</span>
+        <span class="entry-meta">
+          <span class="entry-os">${w.os}</span>
+          <span class="entry-diff ${diffClass(w.diff)}">${w.diff}</span>
+        </span>
+        <span class="entry-arrow">→</span>
+        ${tagsHtml}
+      </a>`;
+    }
+    html += `</div>`;
+  }
+  list.innerHTML = html;
+  renderPagination(total, pages);
+}
+
+function tagSearch(e, tag){
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('search').value = tag;
+  currentSearch = tag;
+  currentFilter = 'all';
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.filter-btn[data-filter="all"]').classList.add('active');
+  currentPage = 1;
+  renderList();
+  scrollToList();
+}
+
+function renderPagination(total, pages){
+  const pag = document.getElementById('pagination');
+  if (pages<=1){ pag.innerHTML=''; return; }
+  let html = `<button class="page-btn" id="pg-prev" ${currentPage===1?'disabled':''}>‹</button>`;
+  const range=[];
+  for(let i=1;i<=pages;i++){ if(i===1||i===pages||(i>=currentPage-2&&i<=currentPage+2)) range.push(i); else if(range[range.length-1]!=='…') range.push('…'); }
+  for(const r of range){ html += r==='…' ? `<span class="page-ellipsis">…</span>` : `<button class="page-btn ${r===currentPage?'active':''}" data-page="${r}">${r}</button>`; }
+  html += `<button class="page-btn" id="pg-next" ${currentPage===pages?'disabled':''}>›</button>`;
+  html += `<span class="page-info">${(currentPage-1)*CONFIG.perPage+1}–${Math.min(currentPage*CONFIG.perPage,total)} of ${total}</span>`;
+  pag.innerHTML = html;
+  pag.querySelector('#pg-prev')?.addEventListener('click',()=>{currentPage--;renderList();scrollToList();});
+  pag.querySelector('#pg-next')?.addEventListener('click',()=>{currentPage++;renderList();scrollToList();});
+  pag.querySelectorAll('[data-page]').forEach(btn=>btn.addEventListener('click',()=>{currentPage=parseInt(btn.dataset.page,10);renderList();scrollToList();}));
+}
+function scrollToList(){ document.getElementById('writeups').scrollIntoView({behavior:'smooth',block:'start'}); }
+
+document.querySelectorAll('.filter-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); currentFilter=btn.dataset.filter; currentPage=1; renderList();
+  });
+});
+document.getElementById('search').addEventListener('input',(e)=>{ currentSearch=e.target.value.trim(); currentPage=1; renderList(); });
+
+(async ()=>{
+  const grid = document.getElementById('platform-grid');
+  try {
+    const res = await fetch('./writeups.json');
+    if (!res.ok) throw new Error(res.status);
+    CONFIG.writeups = await res.json();
+  } catch(e) {
+    CONFIG.writeups = [];
+    grid.innerHTML = `<div class="empty-state">could not load <span>writeups.json</span></div>`;
+  }
+  renderPlatformGrid();
+})();
+</script>
+</body>
+</html>
